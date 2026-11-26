@@ -31,7 +31,26 @@
         <h1 id="project-title">Đang tải mô hình…</h1>
         <p class="project-meta" id="project-meta"></p>
       </div>
-      <button type="button" class="button button-primary" id="scan"><svg><use href="#i-qr"/></svg>Quét tem QR</button>
+      <button type="button" class="button button-primary" id="scan" aria-controls="scanner" aria-expanded="false"><svg><use href="#i-qr"/></svg>Quét tem QR</button>
+    </section>
+    <section class="card scanner" id="scanner" aria-labelledby="scan-title" hidden>
+      <div class="card-header">
+        <h2 id="scan-title" tabindex="-1"><svg><use href="#i-qr"/></svg>Quét tem QR</h2>
+        <button type="button" class="button button-outline" id="close-scan">Đóng camera</button>
+      </div>
+      <div class="scanner-body">
+        <div class="camera-frame" id="camera-frame" hidden>
+          <video id="camera" autoplay playsinline muted aria-hidden="true"></video>
+          <div class="scan-target" id="scan-target" aria-hidden="true"></div>
+        </div>
+        <p id="camera-status" role="status">Đang mở camera…</p>
+        <div class="scanner-actions">
+          <button type="button" class="button button-navy" id="retry-camera" hidden>Mở lại camera</button>
+          <button type="button" class="button button-outline" id="photo"><svg><use href="#i-camera"/></svg>Chọn ảnh tem</button>
+          <button type="button" class="button button-outline" id="manual-scan"><svg><use href="#i-search"/></svg>Nhập mã</button>
+        </div>
+        <input type="file" id="photo-file" accept="image/*" hidden>
+      </div>
     </section>
     <div class="workspace">
       <section class="card viewport-card" id="viewer" aria-labelledby="viewer-title">
@@ -43,9 +62,15 @@
             <button type="button" class="button button-outline icon-button" id="fit" aria-label="Đưa mô hình vào khung" title="Đưa mô hình vào khung"><svg><use href="#i-fit"/></svg></button>
           </div>
         </div>
+        <div class="scan-result" id="scan-result" hidden>
+          <div>
+            <h3 id="scan-result-title" tabindex="-1"></h3>
+            <p id="scan-result-meta"></p>
+          </div>
+          <button type="button" class="button button-primary" id="scan-next" aria-controls="scanner" aria-expanded="false"><svg><use href="#i-qr"/></svg>Quét tiếp</button>
+        </div>
         <div class="stage" id="stage">
           <p id="viewer-error" class="viewport-error" hidden></p>
-          <div class="selection-tag" id="selection-tag" hidden></div>
         </div>
         <div class="card-footer"><span class="legend"><span></span>Cấu kiện đang chọn</span><span class="viewer-hint" id="viewer-hint">Kéo để xoay · Cuộn để thu phóng</span></div>
       </section>
@@ -61,22 +86,13 @@
         </div>
         <div id="part-detail" class="part-detail" aria-live="polite"></div>
         <div class="part-browser">
-          <div class="part-browser-heading"><h3>Danh sách cấu kiện</h3><span id="list-count"></span></div>
+          <div class="part-browser-heading"><h3 id="part-list-title" tabindex="-1">Danh sách cấu kiện</h3><span id="list-count"></span></div>
           <ul class="part-list" id="parts"></ul>
         </div>
       </aside>
     </div>
     <p class="footer-note">Dữ liệu mô hình từ SketchUp + ABF</p>
   </main>
-  <dialog id="camera-dialog" aria-labelledby="scan-title">
-    <div class="dialog-header"><h2 id="scan-title">Quét tem QR</h2><button type="button" class="button icon-button button-outline" data-close="camera-dialog" aria-label="Đóng">×</button></div>
-    <div class="dialog-body">
-      <div class="camera-frame" id="camera-frame" hidden><video id="camera" autoplay playsinline muted></video><div class="scan-target"></div></div>
-      <p id="camera-status" role="status">Đang mở camera…</p>
-      <button type="button" class="button button-outline" id="photo"><svg><use href="#i-camera"/></svg>Chọn ảnh tem</button>
-      <input type="file" id="photo-file" accept="image/*" hidden>
-    </div>
-  </dialog>
   <dialog id="import-dialog" aria-labelledby="import-title">
     <div class="dialog-header"><h2 id="import-title">Nạp mô hình SketchUp</h2><button type="button" class="button icon-button button-outline" data-close="import-dialog" aria-label="Đóng">×</button></div>
     <div class="dialog-body">

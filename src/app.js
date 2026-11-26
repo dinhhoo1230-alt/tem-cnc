@@ -8,7 +8,13 @@ const select = byId('group-select');
 const lookup = byId('lookup');
 const feedback = byId('lookup-feedback');
 const partList = byId('parts');
-const tag = byId('selection-tag');
+const listTitle = byId('part-list-title');
+const resultPanel = byId('scan-result');
+const resultTitle = byId('scan-result-title');
+const scanner = byId('scanner');
+const scanTitle = byId('scan-title');
+const scanButton = byId('scan');
+const scanNext = byId('scan-next');
 let model = null;
 let groups = [];
 let group = null;
@@ -16,6 +22,7 @@ let activePart = null;
 let candidates = null;
 let viewer = null;
 let modelRevision = 0;
+let scanTrigger = scanButton;
 
 function element(tagName, text, className) {
   const node = document.createElement(tagName);
@@ -35,18 +42,20 @@ try {
 function renderPart() {
   const container = byId('part-detail');
   container.replaceChildren();
-  tag.hidden = !activePart || !viewer;
+  resultPanel.hidden = !activePart;
   if (!activePart) return;
   const part = activePart;
   const prettyName = part.name.replace(/_/g, ' · ').replace(/\s+·\s*$/, '');
-  tag.textContent = `#${part.code} · ${prettyName}`;
   const box = element('section', null, 'detail-box');
   const size = part.cut ? [...part.cut.size, part.cut.thickness].filter(Number.isFinite) : part.modelSize;
+  const dimensions = size.map(value => number.format(value)).join(' × ') + ' mm';
+  resultTitle.textContent = `#${part.code} · ${prettyName}`;
+  byId('scan-result-meta').textContent = `${part.group} · ${dimensions}`;
   const heading = element('h3', `Cấu kiện #${part.code}`, 'part-title');
   const title = element('p', prettyName, 'part-name');
   const metadata = [
     [part.path.length ? 'Cụm lắp' : 'Nhóm tra cứu', part.group],
-    [part.cut ? 'Kích thước cắt' : 'Kích thước 3D', size.map(value => number.format(value)).join(' × ') + ' mm']
+    [part.cut ? 'Kích thước cắt' : 'Kích thước 3D', dimensions]
   ];
   if (part.cut?.sheet != null) metadata.push(['Tấm ván cắt', `Tấm ${part.cut.sheet}`]);
   if (part.cut?.material) metadata.push(['Vật liệu', part.cut.material]);
@@ -63,6 +72,7 @@ function renderPart() {
 function renderList(reveal = false) {
   const parts = candidates ?? (model?.parts.filter(part => group === null || part.group === group) ?? []);
   byId('list-count').textContent = parts.length;
+  listTitle.textContent = candidates ? `Chọn cấu kiện #${candidates[0].code}` : 'Danh sách cấu kiện';
   const fragment = document.createDocumentFragment();
   let activeRow;
   for (const part of parts) {
@@ -71,8 +81,12 @@ function renderList(reveal = false) {
     button.type = 'button';
     const selected = part.id === activePart?.id;
     button.setAttribute('aria-pressed', String(selected));
-    button.append(element('span', `#${part.code}`, 'part-number'), element('span', part.name.replace(/_/g, ' ').trim()));
-    button.addEventListener('click', () => showPart(part, true, true));
+    const name = part.name.replace(/_/g, ' ').trim();
+    button.append(element('span', `#${part.code}`, 'part-number'), element('span', candidates ? `${name} · ${part.group}` : name));
+    button.addEventListener('click', () => {
+      if (candidates) revealLookup({ part });
+      else showPart(part, true, true);
+    });
     item.append(button);
     fragment.append(item);
     if (selected) activeRow = item;
@@ -110,26 +124,33 @@ function setGroup(value, fit = true) {
   renderList();
 }
 
-function findPart(text) {
+function resolveCode(text) {
   const code = codeFromLabel(text);
-  if (!model) return 'Hãy nạp mô hình trước khi tra tem.';
-  if (code === null) return 'Không nhận ra số cấu kiện. Hãy dùng tem ABF hoặc nhập số in trên tem.';
+  if (!model) return { error: 'Hãy nạp mô hình của đơn cắt trước khi tra tem.' };
+  if (code === null) return { error: 'Mã này chưa nhận ra là tem ABF. Hãy thử tem khác hoặc nhập số trên tem.' };
   const matches = model.parts.filter(part => part.code === code);
-  if (matches.length === 0) return `Không tìm thấy mã #${code} trong đơn cắt này.`;
-  if (matches.length > 1) {
+  if (matches.length === 0) return { error: `Mã #${code} không có trong đơn cắt đang mở. Hãy kiểm tra tên đơn cắt.` };
+  if (matches.length > 1) return { code, matches };
+  return { part: matches[0] };
+}
+
+function revealLookup({ part, code, matches }) {
+  if (matches) {
     candidates = matches;
     activePart = null;
     lookup.value = code;
+    feedback.textContent = `Có ${matches.length} cấu kiện mang mã #${code}. Chọn đúng cụm lắp từ danh sách.`;
     viewer?.highlight(null);
     renderPart();
     renderList();
-    return `Mã #${code} trùng trong mô hình. Hãy chọn cấu kiện từ danh sách.`;
+    listTitle.focus({ preventScroll: true });
+    listTitle.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+    return;
   }
-  const [part] = matches;
   if (group !== part.group) setGroup(part.group, false);
   showPart(part, true, true);
-  if (matchMedia('(max-width: 820px)').matches) setTimeout(() => byId('viewer').scrollIntoView({ block: 'start' }), 75);
-  return '';
+  resultTitle.focus({ preventScroll: true });
+  byId('viewer').scrollIntoView({ block: 'start', behavior: 'instant' });
 }
 
 function displayProject(project, demo) {
@@ -179,13 +200,16 @@ async function initialize() {
   }
 }
 
-const scanDialog = byId('camera-dialog');
 const camera = setupCamera({
-  dialog: scanDialog, video: byId('camera'), frame: byId('camera-frame'), status: byId('camera-status'),
-  onCode: text => {
-    const error = findPart(text);
-    feedback.textContent = error;
-    return error;
+  panel: scanner, video: byId('camera'), frame: byId('camera-frame'), target: byId('scan-target'),
+  status: byId('camera-status'), retry: byId('retry-camera'), resolveCode, onResult: revealLookup,
+  onVisibility: visible => {
+    scanButton.setAttribute('aria-expanded', String(visible));
+    scanNext.setAttribute('aria-expanded', String(visible));
+    if (visible) {
+      scanTitle.focus({ preventScroll: true });
+      scanner.scrollIntoView({ block: 'start', behavior: 'instant' });
+    }
   }
 });
 const importDialog = byId('import-dialog');
@@ -196,14 +220,41 @@ const useDemo = byId('use-demo');
 document.querySelectorAll('[data-close]').forEach(button => {
   button.addEventListener('click', () => byId(button.dataset.close).close());
 });
-byId('scan').addEventListener('click', camera.open);
-byId('photo').addEventListener('click', () => byId('photo-file').click());
+for (const button of [scanButton, scanNext]) {
+  button.addEventListener('click', event => {
+    scanTrigger = event.currentTarget;
+    if (scanner.hidden) camera.open();
+    else {
+      scanTitle.focus({ preventScroll: true });
+      scanner.scrollIntoView({ block: 'start', behavior: 'instant' });
+    }
+  });
+}
+function dismissScanner() {
+  camera.close();
+  scanTrigger.focus();
+}
+byId('close-scan').addEventListener('click', dismissScanner);
+scanner.addEventListener('keydown', event => {
+  if (event.key === 'Escape') dismissScanner();
+});
+byId('manual-scan').addEventListener('click', () => {
+  camera.close();
+  lookup.focus();
+});
+byId('photo').addEventListener('click', () => {
+  camera.preparePhoto();
+  byId('photo-file').click();
+});
 byId('photo-file').addEventListener('change', async event => {
   const file = event.target.files[0];
   event.target.value = '';
   if (file) await camera.fromPhoto(file);
 });
-byId('import').addEventListener('click', () => importDialog.showModal());
+byId('import').addEventListener('click', () => {
+  camera.close();
+  importDialog.showModal();
+});
 chooseModel.addEventListener('click', () => modelFile.click());
 modelFile.addEventListener('change', async () => {
   const file = modelFile.files[0];
@@ -250,7 +301,12 @@ useDemo.addEventListener('click', async () => {
 });
 byId('lookup-form').addEventListener('submit', event => {
   event.preventDefault();
-  feedback.textContent = findPart(lookup.value);
+  const result = resolveCode(lookup.value);
+  if (result.error) feedback.textContent = result.error;
+  else {
+    camera.close();
+    revealLookup(result);
+  }
 });
 select.addEventListener('change', () => {
   candidates = null;

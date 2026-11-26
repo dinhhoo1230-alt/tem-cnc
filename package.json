@@ -4,7 +4,8 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "build": "esbuild src/app.js --bundle --format=esm --minify --legal-comments=linked --outfile=dist/app.js"
+    "build": "esbuild src/app.js --bundle --format=esm --minify --legal-comments=linked --outfile=dist/app.js",
+    "test": "node --test"
   },
   "dependencies": {
     "jsqr": "1.4.0",
