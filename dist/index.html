@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#172638">
+  <meta name="description" content="Quét tem ABF để tìm vị trí cấu kiện trong mô hình 3D.">
+  <title>Tem CNC — Tra cấu kiện ABF</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="i-box" viewBox="0 0 24 24"><path d="m12 2 9 5v10l-9 5-9-5V7l9-5Zm0 10 9-5m-9 5L3 7m9 5v10M7.5 4.5l9 5"/></symbol>
+    <symbol id="i-qr" viewBox="0 0 24 24"><path d="M3 8V3h5m8 0h5v5m0 8v5h-5m-8 0H3v-5M7 7h3v3H7zm7 0h3v3h-3zm-7 7h3v3H7zm7 0v3m3-3v3"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Zm0 0v6h6M8 14h8m-8 3h5"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="5.5"/><path d="m15 15 5 5"/></symbol>
+    <symbol id="i-fit" viewBox="0 0 24 24"><path d="M3 9V3h6m6 0h6v6m0 6v6h-6m-6 0H3v-6m9-6v6m-3-3h6"/></symbol>
+    <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 6h4l2-3h4l2 3h4a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Z"/><circle cx="12" cy="13" r="3"/></symbol>
+  </svg>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand"><span class="brand-icon"><svg><use href="#i-box"/></svg></span><span>Tem CNC</span></div>
+      <button type="button" class="button button-outline header-button" id="import"><svg><use href="#i-file"/></svg>Nạp mô hình</button>
+    </div>
+  </header>
+  <main class="shell">
+    <section class="project-heading" aria-label="Đơn cắt">
+      <div>
+        <p class="eyebrow" id="project-kind">ĐƠN CẮT</p>
+        <h1 id="project-title">Đang tải mô hình…</h1>
+        <p class="project-meta" id="project-meta"></p>
+      </div>
+      <button type="button" class="button button-primary" id="scan"><svg><use href="#i-qr"/></svg>Quét tem QR</button>
+    </section>
+    <div class="workspace">
+      <section class="card viewport-card" id="viewer" aria-labelledby="viewer-title">
+        <div class="card-header viewer-header">
+          <h2 id="viewer-title"><svg><use href="#i-box"/></svg>Mô hình 3D</h2>
+          <div class="viewer-tools">
+            <label class="visually-hidden" for="group-select">Cụm lắp</label>
+            <select id="group-select"></select>
+            <button type="button" class="button button-outline icon-button" id="fit" aria-label="Đưa mô hình vào khung" title="Đưa mô hình vào khung"><svg><use href="#i-fit"/></svg></button>
+          </div>
+        </div>
+        <div class="stage" id="stage">
+          <p id="viewer-error" class="viewport-error" hidden></p>
+          <div class="selection-tag" id="selection-tag" hidden></div>
+        </div>
+        <div class="card-footer"><span class="legend"><span></span>Cấu kiện đang chọn</span><span class="viewer-hint" id="viewer-hint">Kéo để xoay · Cuộn để thu phóng</span></div>
+      </section>
+      <aside class="card inspector" aria-label="Tra cấu kiện">
+        <div class="card-header"><h2><svg><use href="#i-search"/></svg>Tra cấu kiện</h2></div>
+        <div class="lookup">
+          <form id="lookup-form" class="lookup-form">
+            <label class="visually-hidden" for="lookup">Số trên tem ABF</label>
+            <input id="lookup" type="search" placeholder="Nhập số trên tem" inputmode="numeric" autocomplete="off" required>
+            <button type="submit" class="button button-navy">Tìm</button>
+          </form>
+          <p class="feedback" id="lookup-feedback" role="status"></p>
+        </div>
+        <div id="part-detail" class="part-detail" aria-live="polite"></div>
+        <div class="part-browser">
+          <div class="part-browser-heading"><h3>Danh sách cấu kiện</h3><span id="list-count"></span></div>
+          <ul class="part-list" id="parts"></ul>
+        </div>
+      </aside>
+    </div>
+    <p class="footer-note">Dữ liệu mô hình từ SketchUp + ABF</p>
+  </main>
+  <dialog id="camera-dialog" aria-labelledby="scan-title">
+    <div class="dialog-header"><h2 id="scan-title">Quét tem QR</h2><button type="button" class="button icon-button button-outline" data-close="camera-dialog" aria-label="Đóng">×</button></div>
+    <div class="dialog-body">
+      <div class="camera-frame" id="camera-frame" hidden><video id="camera" autoplay playsinline muted></video><div class="scan-target"></div></div>
+      <p id="camera-status" role="status">Đang mở camera…</p>
+      <button type="button" class="button button-outline" id="photo"><svg><use href="#i-camera"/></svg>Chọn ảnh tem</button>
+      <input type="file" id="photo-file" accept="image/*" hidden>
+    </div>
+  </dialog>
+  <dialog id="import-dialog" aria-labelledby="import-title">
+    <div class="dialog-header"><h2 id="import-title">Nạp mô hình SketchUp</h2><button type="button" class="button icon-button button-outline" data-close="import-dialog" aria-label="Đóng">×</button></div>
+    <div class="dialog-body">
+      <ol class="import-steps">
+        <li>Cài tiện ích <strong>Tem CNC</strong> trong Extension Manager của SketchUp. <a href="./tem-cnc-sketchup.rbz" download>Tải tiện ích .rbz</a></li>
+        <li>Mở file <strong>.skp</strong> có cấu kiện ABF. Chọn <strong>Extensions → Tem CNC • Xuất mô hình ABF</strong>.</li>
+        <li>Chọn file <strong>.abf.json</strong> vừa xuất. Mô hình sẽ được lưu trên trình duyệt này.</li>
+      </ol>
+      <div class="dialog-actions">
+        <button type="button" class="button button-navy" id="choose-model"><svg><use href="#i-file"/></svg>Chọn file .abf.json</button>
+        <button type="button" class="button button-outline" id="use-demo">Mở mô hình mẫu</button>
+      </div>
+      <p id="import-status" class="feedback" role="status"></p>
+      <input type="file" id="model-file" accept=".json,application/json" hidden>
+    </div>
+  </dialog>
+</body>
+</html>

@@ -1,0 +1,41 @@
+name: Publish Tem CNC to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: tem-cnc-pages
+  cancel-in-progress: false
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - name: Stage published files
+        run: |
+          mkdir -p public
+          install -m 0644 -t public/ \
+            dist/index.html dist/styles.css dist/app.js dist/app.js.LEGAL.txt \
+            dist/demo.abf.json dist/tem-cnc-sketchup.rbz
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: public
+
+  deploy:
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
