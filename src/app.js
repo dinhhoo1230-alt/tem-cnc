@@ -242,15 +242,18 @@ byId('manual-scan').addEventListener('click', () => {
   camera.close();
   lookup.focus();
 });
-byId('photo').addEventListener('click', () => {
-  camera.preparePhoto();
-  byId('photo-file').click();
-});
-byId('photo-file').addEventListener('change', async event => {
-  const file = event.target.files[0];
-  event.target.value = '';
-  if (file) await camera.fromPhoto(file);
-});
+for (const [buttonId, inputId] of [['take-photo', 'capture-file'], ['photo', 'photo-file']]) {
+  const input = byId(inputId);
+  byId(buttonId).addEventListener('click', () => {
+    camera.preparePhoto();
+    input.click();
+  });
+  input.addEventListener('change', () => {
+    const file = input.files[0];
+    input.value = '';
+    if (file) camera.fromPhoto(file);
+  });
+}
 byId('import').addEventListener('click', () => {
   camera.close();
   importDialog.showModal();

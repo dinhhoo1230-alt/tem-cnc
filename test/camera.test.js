@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { setupCamera } from '../src/camera.js';
+import { preferPhotoCapture, setupCamera } from '../src/camera.js';
 
 // Synthetic QR containing 18.ABF,,, with a quiet zone around the modules.
 const qr = [
@@ -13,12 +13,12 @@ const qr = [
   '101110101001110010111', '100000100101011011000', '111111101101111111101'
 ];
 
-function fakeBrowser(t, { resolveCode, pendingPermission = false }) {
+function fakeBrowser(t, { resolveCode, pendingPermission = false, userAgent = '', search = '' }) {
   const panel = { hidden: true };
-  const video = {
+  const video = Object.assign(new EventTarget(), {
     readyState: 2, videoWidth: 320, videoHeight: 240, srcObject: null,
     play: async () => {}, pause() {}
-  };
+  });
   const attributes = new Set();
   const frame = {
     hidden: true, clientWidth: 320, clientHeight: 240,
@@ -55,13 +55,14 @@ function fakeBrowser(t, { resolveCode, pendingPermission = false }) {
   let nextId = 0;
   const status = { textContent: '' };
   const retry = new EventTarget();
+  let permissionRequests = 0;
   let grant;
   const permission = pendingPermission ? new Promise(resolve => { grant = () => resolve(stream); }) : Promise.resolve(stream);
   const overrides = new Map();
   for (const [key, value] of Object.entries({
     document: doc,
-    window: new EventTarget(),
-    navigator: { mediaDevices: { getUserMedia: () => permission } },
+    window: Object.assign(new EventTarget(), { location: { search } }),
+    navigator: { userAgent, mediaDevices: { getUserMedia() { permissionRequests++; return permission; } } },
     requestAnimationFrame: callback => { callbacks.set(++nextId, callback); return nextId; },
     cancelAnimationFrame: id => callbacks.delete(id)
   })) {
@@ -91,6 +92,7 @@ function fakeBrowser(t, { resolveCode, pendingPermission = false }) {
   return {
     camera, panel, frame, status, doc, video, results, draws, visibility, grant,
     stopped: () => stopped,
+    permissionRequests: () => permissionRequests,
     tick(time) {
       const [id, callback] = callbacks.entries().next().value;
       callbacks.delete(id);
@@ -147,4 +149,56 @@ test('closing while camera permission is pending releases the late stream', asyn
   assert.equal(browser.video.srcObject, null);
   assert.equal(browser.stopped(), 1);
   assert.equal(browser.queued(), 0);
+});
+
+test('iPhone browsers in apps use photos without opening a live stream', async t => {
+  const browser = fakeBrowser(t, {
+    userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Zalo',
+    resolveCode: assert.fail
+  });
+  await browser.camera.open();
+  assert.equal(browser.panel.hidden, false);
+  assert.equal(browser.frame.hidden, true);
+  assert.equal(browser.permissionRequests(), 0);
+  assert.match(browser.status.textContent, /Chụp tem/);
+});
+
+test('normal iPhone Safari still uses video unless photo mode was explicitly requested', () => {
+  const safari = { userAgent: 'Mozilla/5.0 (iPhone) AppleWebKit/605.1.15 Version/26.0 Mobile/15E148 Safari/604.1' };
+  assert.equal(preferPhotoCapture(safari), false);
+  assert.equal(preferPhotoCapture(safari, '?camera=photo'), true);
+  assert.equal(preferPhotoCapture({ userAgent: 'Mozilla/5.0 (iPhone) AppleWebKit/605.1.15 Mobile/15E148' }), true);
+  assert.equal(preferPhotoCapture({ ...safari, userAgent: safari.userAgent + ' ZaloApp/26.01' }), true);
+});
+
+test('native fullscreen exits before a detected result tears down the video', async t => {
+  const accepted = { part: { code: 18 } };
+  const browser = fakeBrowser(t, { resolveCode: () => accepted });
+  let exitRequests = 0;
+  browser.video.webkitExitFullscreen = () => { exitRequests++; };
+  await browser.camera.open();
+  browser.video.webkitDisplayingFullscreen = true;
+  browser.video.dispatchEvent(new Event('webkitbeginfullscreen'));
+  browser.tick(200);
+  assert.equal(exitRequests, 1);
+  assert.equal(browser.stopped(), 0);
+  assert.ok(browser.video.srcObject);
+  assert.equal(browser.results.length, 0);
+  browser.video.webkitDisplayingFullscreen = false;
+  browser.video.dispatchEvent(new Event('webkitendfullscreen'));
+  assert.deepEqual(browser.results, [accepted]);
+});
+
+test('a forced fullscreen player returns to the photo option if no code was decoded', async t => {
+  const browser = fakeBrowser(t, { resolveCode: assert.fail });
+  browser.video.webkitExitFullscreen = () => {};
+  await browser.camera.open();
+  browser.video.webkitDisplayingFullscreen = true;
+  browser.video.dispatchEvent(new Event('webkitbeginfullscreen'));
+  assert.equal(browser.stopped(), 0);
+  browser.video.webkitDisplayingFullscreen = false;
+  browser.video.dispatchEvent(new Event('webkitendfullscreen'));
+  assert.equal(browser.panel.hidden, false);
+  assert.equal(browser.stopped(), 1);
+  assert.match(browser.status.textContent, /Chụp tem/);
 });

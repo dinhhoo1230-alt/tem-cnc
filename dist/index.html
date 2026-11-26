@@ -7,7 +7,7 @@
   <meta name="description" content="Quét tem ABF để tìm vị trí cấu kiện trong mô hình 3D.">
   <title>Tem CNC — Tra cấu kiện ABF</title>
   <link rel="stylesheet" href="./styles.css">
-  <script type="module" src="./app.js"></script>
+  <script type="module" src="./app.js?v=ios-fullscreen"></script>
 </head>
 <body>
   <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -40,15 +40,17 @@
       </div>
       <div class="scanner-body">
         <div class="camera-frame" id="camera-frame" hidden>
-          <video id="camera" autoplay playsinline muted aria-hidden="true"></video>
+          <video id="camera" autoplay playsinline webkit-playsinline muted disablepictureinpicture aria-hidden="true"></video>
           <div class="scan-target" id="scan-target" aria-hidden="true"></div>
         </div>
         <p id="camera-status" role="status">Đang mở camera…</p>
         <div class="scanner-actions">
           <button type="button" class="button button-navy" id="retry-camera" hidden>Mở lại camera</button>
+          <button type="button" class="button button-navy" id="take-photo"><svg><use href="#i-camera"/></svg>Chụp tem</button>
           <button type="button" class="button button-outline" id="photo"><svg><use href="#i-camera"/></svg>Chọn ảnh tem</button>
           <button type="button" class="button button-outline" id="manual-scan"><svg><use href="#i-search"/></svg>Nhập mã</button>
         </div>
+        <input type="file" id="capture-file" accept="image/*" capture="environment" hidden>
         <input type="file" id="photo-file" accept="image/*" hidden>
       </div>
     </section>

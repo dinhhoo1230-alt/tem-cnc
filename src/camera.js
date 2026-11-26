@@ -3,6 +3,13 @@ import jsQR from 'jsqr';
 const FRAME_INTERVAL = 120;
 const CAMERA_START_TIMEOUT = 8000;
 const GUIDE_TEXT = 'Đưa một mã QR trên tem vào giữa khung.';
+const PHOTO_TEXT = 'Chọn Chụp tem, hướng camera vào mã QR rồi xác nhận dùng ảnh. Để quét trực tiếp, mở trang bằng Safari.';
+
+export function preferPhotoCapture({ userAgent = '', platform = '', maxTouchPoints = 0 }, search = '') {
+  if (new URLSearchParams(search).get('camera') === 'photo') return true;
+  const isAppleMobile = /iPhone|iPod|iPad/i.test(userAgent) || (platform === 'MacIntel' && maxTouchPoints > 1);
+  return isAppleMobile && (/Zalo/i.test(userAgent) || !/Safari\//i.test(userAgent));
+}
 
 export function setupCamera({ panel, video, frame, target, status, retry, resolveCode, onResult, onVisibility }) {
   const canvas = document.createElement('canvas');
@@ -13,6 +20,10 @@ export function setupCamera({ panel, video, frame, target, status, retry, resolv
   let generation = 0;
   let lastDecode = -Infinity;
   let lastCode = null;
+  let photoOnly = preferPhotoCapture(navigator, window.location?.search);
+  let hasNativeFullscreen = false;
+  let afterNativeFullscreen = null;
+  let exitRetry = null;
 
   function decode(source, x, y, width, height, limit, inversionAttempts) {
     const scale = Math.min(1, limit / Math.max(width, height));
@@ -73,9 +84,47 @@ export function setupCamera({ panel, video, frame, target, status, retry, resolv
       return false;
     }
     // Leave the camera view before rendering or moving focus to the result.
-    close();
-    onResult(result);
+    afterInline(() => {
+      hideScanner();
+      onResult(result);
+    });
     return true;
+  }
+
+  function fullscreenActive() {
+    return hasNativeFullscreen || video.webkitDisplayingFullscreen === true;
+  }
+
+  function finishFullscreenExit() {
+    clearTimeout(exitRetry);
+    exitRetry = null;
+    hasNativeFullscreen = false;
+    const action = afterNativeFullscreen;
+    afterNativeFullscreen = null;
+    action?.();
+  }
+
+  function requestFullscreenExit() {
+    try {
+      if (typeof video.webkitExitFullscreen === 'function') video.webkitExitFullscreen();
+      else video.webkitSetPresentationMode?.('inline');
+    } catch {
+      // The embedded player can reject exits until it has finished entering fullscreen.
+    }
+  }
+
+  function afterInline(action) {
+    if (!fullscreenActive()) {
+      action();
+      return;
+    }
+    afterNativeFullscreen = action;
+    if (exitRetry !== null) return;
+    exitRetry = setTimeout(() => {
+      exitRetry = null;
+      if (fullscreenActive()) requestFullscreenExit();
+    }, 220);
+    requestFullscreenExit();
   }
 
   function release() {
@@ -97,15 +146,19 @@ export function setupCamera({ panel, video, frame, target, status, retry, resolv
 
   function pause(message) {
     release();
-    retry.hidden = !navigator.mediaDevices?.getUserMedia;
+    retry.hidden = photoOnly || !navigator.mediaDevices?.getUserMedia;
     status.textContent = message;
   }
 
-  function close() {
+  function hideScanner() {
     if (panel.hidden) return;
     panel.hidden = true;
     release();
     onVisibility(false);
+  }
+
+  function close() {
+    if (!panel.hidden) afterInline(hideScanner);
   }
 
   async function start() {
@@ -114,6 +167,10 @@ export function setupCamera({ panel, video, frame, target, status, retry, resolv
     retry.hidden = true;
     lastCode = null;
     lastDecode = -Infinity;
+    if (photoOnly) {
+      status.textContent = PHOTO_TEXT;
+      return;
+    }
     if (!context || !navigator.mediaDevices?.getUserMedia) {
       status.textContent = 'Camera chưa dùng được trong trình duyệt này. Chọn ảnh tem hoặc nhập mã.';
       return;
@@ -170,7 +227,7 @@ export function setupCamera({ panel, video, frame, target, status, retry, resolv
     if (panel.hidden || !context) return;
     release();
     const current = generation;
-    retry.hidden = !navigator.mediaDevices?.getUserMedia;
+    retry.hidden = photoOnly || !navigator.mediaDevices?.getUserMedia;
     status.textContent = 'Đang đọc mã trong ảnh…';
     const url = URL.createObjectURL(file);
     const picture = new Image();
@@ -190,12 +247,29 @@ export function setupCamera({ panel, video, frame, target, status, retry, resolv
     else status.textContent = 'Chưa thấy mã QR. Hãy chọn ảnh rõ hơn, thấy trọn mã trên tem.';
   }
 
+  video.addEventListener('webkitbeginfullscreen', () => {
+    if (panel.hidden || !stream) return;
+    hasNativeFullscreen = true;
+    photoOnly = true;
+    if (!afterNativeFullscreen) afterInline(() => pause(PHOTO_TEXT));
+  });
+  video.addEventListener('webkitendfullscreen', finishFullscreenExit);
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden && stream) {
-      pause('Camera đã tạm dừng. Chọn Mở lại camera để quét tiếp.');
+    if (document.hidden && stream && !fullscreenActive()) {
+      const current = generation;
+      // On iOS, the visibility event may precede the native fullscreen event.
+      setTimeout(() => {
+        if (document.hidden && stream && current === generation && !fullscreenActive()) {
+          pause('Camera đã tạm dừng. Chọn Mở lại camera để quét tiếp.');
+        }
+      }, 250);
     }
   });
-  window.addEventListener('pagehide', close);
+  window.addEventListener('pagehide', () => {
+    afterNativeFullscreen = null;
+    finishFullscreenExit();
+    hideScanner();
+  });
   retry.addEventListener('click', start);
   return { open, close, preparePhoto, fromPhoto };
 }
