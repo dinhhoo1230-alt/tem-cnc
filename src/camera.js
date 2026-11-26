@@ -1,6 +1,7 @@
 import jsQR from 'jsqr';
 
 const FRAME_INTERVAL = 120;
+const QR_CLEAR_DELAY = 450;
 const CAMERA_START_TIMEOUT = 8000;
 const GUIDE_TEXT = 'Đưa một mã QR trên tem vào giữa khung.';
 const PHOTO_TEXT = 'Chọn Chụp tem, hướng camera vào mã QR rồi xác nhận dùng ảnh. Để quét trực tiếp, mở trang bằng Safari.';
@@ -20,6 +21,7 @@ export function setupCamera({ panel, video, frame, target, status, retry, resolv
   let generation = 0;
   let lastDecode = -Infinity;
   let lastCode = null;
+  let lastSeen = -Infinity;
   let photoOnly = preferPhotoCapture(navigator, window.location?.search);
   let hasNativeFullscreen = false;
   let afterNativeFullscreen = null;
@@ -45,7 +47,7 @@ export function setupCamera({ panel, video, frame, target, status, retry, resolv
     const height = video.videoHeight;
     // The video uses object-fit: cover. Convert the visible guide back to source pixels.
     const scale = Math.max(frame.clientWidth / width, frame.clientHeight / height);
-    const side = Math.min(target.offsetWidth / scale, width, height);
+    const side = Math.min(target.offsetWidth, target.offsetHeight) / scale;
     if (!Number.isFinite(side) || side < 32) return null;
     return decode(video, (width - side) / 2, (height - side) / 2, side, side, 720, 'dontInvert');
   }
@@ -68,27 +70,37 @@ export function setupCamera({ panel, video, frame, target, status, retry, resolv
           pause('Không đọc được hình từ camera. Hãy mở lại camera hoặc chọn ảnh tem.');
           return;
         }
-        if (text && text !== lastCode) {
-          lastCode = text;
-          if (accept(text)) return;
+        if (text) {
+          lastSeen = time;
+          if (text !== lastCode) {
+            lastCode = text;
+            accept(text);
+          }
+        } else if (time - lastSeen >= QR_CLEAR_DELAY) {
+          lastCode = null;
         }
       }
     }
-    loop = requestAnimationFrame(tick);
+    if (stream && !panel.hidden) loop = requestAnimationFrame(tick);
   }
 
   function accept(text) {
     const result = resolveCode(text);
     if (!result.part && !result.matches) {
       status.textContent = result.error;
-      return false;
+      return;
     }
-    // Leave the camera view before rendering or moving focus to the result.
     afterInline(() => {
-      hideScanner();
+      if (photoOnly && stream) pause(PHOTO_TEXT);
       onResult(result);
+      if (result.part) confirmPart(result.part);
+      else status.textContent = `Mã #${result.code} trùng. Chọn cụm lắp trong mô hình 3D.`;
     });
-    return true;
+  }
+
+  function confirmPart(part) {
+    const next = stream ? 'Đưa tem tiếp theo vào khung.' : 'Chụp hoặc chọn ảnh tem tiếp theo.';
+    status.textContent = `Đã tìm cấu kiện #${part.code}. ${next}`;
   }
 
   function fullscreenActive() {
@@ -166,6 +178,7 @@ export function setupCamera({ panel, video, frame, target, status, retry, resolv
     release();
     retry.hidden = true;
     lastCode = null;
+    lastSeen = -Infinity;
     lastDecode = -Infinity;
     if (photoOnly) {
       status.textContent = PHOTO_TEXT;
@@ -271,5 +284,5 @@ export function setupCamera({ panel, video, frame, target, status, retry, resolv
     hideScanner();
   });
   retry.addEventListener('click', start);
-  return { open, close, preparePhoto, fromPhoto };
+  return { open, close, preparePhoto, fromPhoto, confirmPart };
 }

@@ -12,6 +12,15 @@ const qr = [
   '100000100100100011010', '101110100010011011110', '101110100101011000000',
   '101110101001110010111', '100000100101011011000', '111111101101111111101'
 ];
+const nextQr = [
+  '111111101111001111111', '100000101010101000001', '101110100100101011101',
+  '101110101110101011101', '101110100011001011101', '100000100111101000001',
+  '111111101010101111111', '000000001011100000000', '101101110111101001011',
+  '101101001001111110111', '001011100111001000001', '110010000001010010001',
+  '111110111100101010000', '000000001111010010110', '111111101101110010110',
+  '100000101010000111110', '101110100110101101000', '101110101101001010010',
+  '101110101010101001100', '100000100010010010001', '111111101100010010000'
+];
 
 function fakeBrowser(t, { resolveCode, pendingPermission = false, userAgent = '', search = '' }) {
   const panel = { hidden: true };
@@ -31,6 +40,7 @@ function fakeBrowser(t, { resolveCode, pendingPermission = false, userAgent = ''
   track.stop = () => { stopped++; };
   const stream = { getVideoTracks: () => [track], getTracks: () => [track] };
   const draws = [];
+  let picture = qr;
   const context = {
     fillRect() {},
     drawImage(...args) { draws.push(args); },
@@ -40,7 +50,7 @@ function fakeBrowser(t, { resolveCode, pendingPermission = false, userAgent = ''
       const offset = Math.floor((width - 21 * scale) / 2);
       for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
-          if (qr[Math.floor((y - offset) / scale)]?.[Math.floor((x - offset) / scale)] === '1') {
+          if (picture[Math.floor((y - offset) / scale)]?.[Math.floor((x - offset) / scale)] === '1') {
             const i = (y * width + x) * 4;
             data.fill(0, i, i + 3);
           }
@@ -72,15 +82,9 @@ function fakeBrowser(t, { resolveCode, pendingPermission = false, userAgent = ''
   const results = [];
   const visibility = [];
   const camera = setupCamera({
-    panel, video, frame, target: { offsetWidth: 170 }, status, retry, resolveCode,
+    panel, video, frame, target: { offsetWidth: 170, offsetHeight: 170 }, status, retry, resolveCode,
     onVisibility: visible => visibility.push(visible),
-    onResult: result => {
-      assert.equal(panel.hidden, true);
-      assert.equal(frame.hidden, true);
-      assert.equal(video.srcObject, null);
-      assert.equal(stopped, 1);
-      results.push(result);
-    }
+    onResult: result => results.push(result)
   });
   t.after(() => {
     camera.close();
@@ -92,6 +96,7 @@ function fakeBrowser(t, { resolveCode, pendingPermission = false, userAgent = ''
   return {
     camera, panel, frame, status, doc, video, results, draws, visibility, grant,
     stopped: () => stopped,
+    show(qr) { picture = qr; },
     permissionRequests: () => permissionRequests,
     tick(time) {
       const [id, callback] = callbacks.entries().next().value;
@@ -102,20 +107,47 @@ function fakeBrowser(t, { resolveCode, pendingPermission = false, userAgent = ''
   };
 }
 
-test('a matched live QR releases the stream before showing the result', async t => {
-  const accepted = { part: { code: 18 } };
+test('successive QR codes update the result in the same camera session', async t => {
   const browser = fakeBrowser(t, {
     resolveCode(text) {
-      assert.equal(text, '18.ABF,,,');
-      return accepted;
+      return { part: { code: parseInt(text, 10) } };
     }
   });
   await browser.camera.open();
+  const stream = browser.video.srcObject;
   browser.tick(200);
-  assert.deepEqual(browser.results, [accepted]);
-  assert.deepEqual(browser.visibility, [true, false]);
-  assert.equal(browser.queued(), 0);
+  browser.tick(350);
+  browser.show(nextQr);
+  browser.tick(500);
+  assert.deepEqual(browser.results.map(({ part }) => part.code), [18, 31]);
+  assert.deepEqual(browser.visibility, [true]);
+  assert.equal(browser.panel.hidden, false);
+  assert.equal(browser.frame.hidden, false);
+  assert.equal(browser.video.srcObject, stream);
+  assert.equal(browser.stopped(), 0);
+  assert.equal(browser.queued(), 1);
+  assert.match(browser.status.textContent, /#31/);
   assert.deepEqual(browser.draws[0].slice(1, 5), [75, 35, 170, 170]);
+  browser.camera.close();
+  assert.deepEqual(browser.visibility, [true, false]);
+  assert.equal(browser.stopped(), 1);
+});
+
+test('brief missed frames do not repeat a QR, but removing it lets it be scanned again', async t => {
+  const browser = fakeBrowser(t, { resolveCode: () => ({ part: { code: 18 } }) });
+  await browser.camera.open();
+  browser.tick(200);
+  browser.show([]);
+  browser.tick(350);
+  browser.show(qr);
+  browser.tick(500);
+  assert.equal(browser.results.length, 1);
+  browser.show([]);
+  browser.tick(650);
+  browser.tick(950);
+  browser.show(qr);
+  browser.tick(1100);
+  assert.equal(browser.results.length, 2);
 });
 
 test('an unknown live QR leaves scanning active and is reported once', async t => {
@@ -187,6 +219,8 @@ test('native fullscreen exits before a detected result tears down the video', as
   browser.video.webkitDisplayingFullscreen = false;
   browser.video.dispatchEvent(new Event('webkitendfullscreen'));
   assert.deepEqual(browser.results, [accepted]);
+  assert.equal(browser.panel.hidden, false);
+  assert.equal(browser.stopped(), 1);
 });
 
 test('a forced fullscreen player returns to the photo option if no code was decoded', async t => {

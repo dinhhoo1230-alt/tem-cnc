@@ -6,8 +6,8 @@
   <meta name="theme-color" content="#172638">
   <meta name="description" content="Quét tem ABF để tìm vị trí cấu kiện trong mô hình 3D.">
   <title>Tem CNC — Tra cấu kiện ABF</title>
-  <link rel="stylesheet" href="./styles.css">
-  <script type="module" src="./app.js?v=ios-fullscreen"></script>
+  <link rel="stylesheet" href="./styles.css?v=continuous-scan">
+  <script type="module" src="./app.js?v=continuous-scan"></script>
 </head>
 <body>
   <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -16,7 +16,6 @@
     <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Zm0 0v6h6M8 14h8m-8 3h5"/></symbol>
     <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="5.5"/><path d="m15 15 5 5"/></symbol>
     <symbol id="i-fit" viewBox="0 0 24 24"><path d="M3 9V3h6m6 0h6v6m0 6v6h-6m-6 0H3v-6m9-6v6m-3-3h6"/></symbol>
-    <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 6h4l2-3h4l2 3h4a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Z"/><circle cx="12" cy="13" r="3"/></symbol>
   </svg>
   <header class="topbar">
     <div class="topbar-inner">
@@ -33,28 +32,28 @@
       </div>
       <button type="button" class="button button-primary" id="scan" aria-controls="scanner" aria-expanded="false"><svg><use href="#i-qr"/></svg>Quét tem QR</button>
     </section>
-    <section class="card scanner" id="scanner" aria-labelledby="scan-title" hidden>
-      <div class="card-header">
-        <h2 id="scan-title" tabindex="-1"><svg><use href="#i-qr"/></svg>Quét tem QR</h2>
-        <button type="button" class="button button-outline" id="close-scan">Đóng camera</button>
-      </div>
-      <div class="scanner-body">
-        <div class="camera-frame" id="camera-frame" hidden>
-          <video id="camera" autoplay playsinline webkit-playsinline muted disablepictureinpicture aria-hidden="true"></video>
-          <div class="scan-target" id="scan-target" aria-hidden="true"></div>
-        </div>
-        <p id="camera-status" role="status">Đang mở camera…</p>
-        <div class="scanner-actions">
-          <button type="button" class="button button-navy" id="retry-camera" hidden>Mở lại camera</button>
-          <button type="button" class="button button-navy" id="take-photo"><svg><use href="#i-camera"/></svg>Chụp tem</button>
-          <button type="button" class="button button-outline" id="photo"><svg><use href="#i-camera"/></svg>Chọn ảnh tem</button>
-          <button type="button" class="button button-outline" id="manual-scan"><svg><use href="#i-search"/></svg>Nhập mã</button>
-        </div>
-        <input type="file" id="capture-file" accept="image/*" capture="environment" hidden>
-        <input type="file" id="photo-file" accept="image/*" hidden>
-      </div>
-    </section>
     <div class="workspace">
+      <section class="card scanner" id="scanner" aria-labelledby="scan-title" hidden>
+        <div class="card-header">
+          <h2 id="scan-title" tabindex="-1"><svg><use href="#i-qr"/></svg>Quét tem QR</h2>
+          <button type="button" class="button button-outline" id="close-scan">Đóng camera</button>
+        </div>
+        <div class="scanner-body">
+          <div class="camera-frame" id="camera-frame" hidden>
+            <video id="camera" autoplay playsinline webkit-playsinline muted disablepictureinpicture aria-hidden="true"></video>
+            <div class="scan-target" id="scan-target" aria-hidden="true"></div>
+          </div>
+          <p id="camera-status" role="status">Đang mở camera…</p>
+          <div class="scanner-actions">
+            <button type="button" class="button button-navy" id="retry-camera" hidden>Mở lại camera</button>
+            <button type="button" class="button button-navy" id="take-photo">Chụp tem</button>
+            <button type="button" class="button button-outline" id="photo">Chọn ảnh tem</button>
+            <button type="button" class="button button-outline" id="manual-scan">Nhập mã</button>
+          </div>
+          <input type="file" id="capture-file" accept="image/*" capture="environment" hidden>
+          <input type="file" id="photo-file" accept="image/*" hidden>
+        </div>
+      </section>
       <section class="card viewport-card" id="viewer" aria-labelledby="viewer-title">
         <div class="card-header viewer-header">
           <h2 id="viewer-title"><svg><use href="#i-box"/></svg>Mô hình 3D</h2>
@@ -71,6 +70,7 @@
           </div>
           <button type="button" class="button button-primary" id="scan-next" aria-controls="scanner" aria-expanded="false"><svg><use href="#i-qr"/></svg>Quét tiếp</button>
         </div>
+        <div class="scan-matches" id="scan-matches" aria-label="Chọn cấu kiện trùng mã" hidden></div>
         <div class="stage" id="stage">
           <p id="viewer-error" class="viewport-error" hidden></p>
         </div>

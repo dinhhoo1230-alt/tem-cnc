@@ -11,6 +11,7 @@ const partList = byId('parts');
 const listTitle = byId('part-list-title');
 const resultPanel = byId('scan-result');
 const resultTitle = byId('scan-result-title');
+const scanMatches = byId('scan-matches');
 const scanner = byId('scanner');
 const scanTitle = byId('scan-title');
 const scanButton = byId('scan');
@@ -43,6 +44,16 @@ function renderPart() {
   const container = byId('part-detail');
   container.replaceChildren();
   resultPanel.hidden = !activePart;
+  scanMatches.hidden = scanner.hidden || !candidates;
+  scanMatches.replaceChildren();
+  if (!scanMatches.hidden) {
+    for (const part of candidates) {
+      const button = element('button', `${part.group} · ${part.name.replace(/_/g, ' ').trim()}`, 'button button-outline');
+      button.type = 'button';
+      button.addEventListener('click', () => chooseCandidate(part));
+      scanMatches.append(button);
+    }
+  }
   if (!activePart) return;
   const part = activePart;
   const prettyName = part.name.replace(/_/g, ' · ').replace(/\s+·\s*$/, '');
@@ -84,7 +95,7 @@ function renderList(reveal = false) {
     const name = part.name.replace(/_/g, ' ').trim();
     button.append(element('span', `#${part.code}`, 'part-number'), element('span', candidates ? `${name} · ${part.group}` : name));
     button.addEventListener('click', () => {
-      if (candidates) revealLookup({ part });
+      if (candidates) chooseCandidate(part);
       else showPart(part, true, true);
     });
     item.append(button);
@@ -134,7 +145,16 @@ function resolveCode(text) {
   return { part: matches[0] };
 }
 
-function revealLookup({ part, code, matches }) {
+function chooseCandidate(part) {
+  const keepScanner = !scanner.hidden;
+  revealLookup({ part }, keepScanner);
+  if (keepScanner) {
+    camera.confirmPart(part);
+    resultTitle.focus({ preventScroll: true });
+  }
+}
+
+function revealLookup({ part, code, matches }, keepScanner = false) {
   if (matches) {
     candidates = matches;
     activePart = null;
@@ -143,12 +163,14 @@ function revealLookup({ part, code, matches }) {
     viewer?.highlight(null);
     renderPart();
     renderList();
+    if (keepScanner) return;
     listTitle.focus({ preventScroll: true });
     listTitle.scrollIntoView({ block: 'nearest', behavior: 'instant' });
     return;
   }
   if (group !== part.group) setGroup(part.group, false);
   showPart(part, true, true);
+  if (keepScanner) return;
   resultTitle.focus({ preventScroll: true });
   byId('viewer').scrollIntoView({ block: 'start', behavior: 'instant' });
 }
@@ -202,10 +224,11 @@ async function initialize() {
 
 const camera = setupCamera({
   panel: scanner, video: byId('camera'), frame: byId('camera-frame'), target: byId('scan-target'),
-  status: byId('camera-status'), retry: byId('retry-camera'), resolveCode, onResult: revealLookup,
+  status: byId('camera-status'), retry: byId('retry-camera'), resolveCode, onResult: result => revealLookup(result, true),
   onVisibility: visible => {
     scanButton.setAttribute('aria-expanded', String(visible));
     scanNext.setAttribute('aria-expanded', String(visible));
+    if (candidates) renderPart();
     if (visible) {
       scanTitle.focus({ preventScroll: true });
       scanner.scrollIntoView({ block: 'start', behavior: 'instant' });

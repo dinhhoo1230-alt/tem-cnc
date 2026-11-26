@@ -116,11 +116,10 @@ export class ModelViewer {
     let radius = groupBounds.getBoundingSphere(new THREE.Sphere()).radius;
     if (partBounds) {
       const partSphere = partBounds.getBoundingSphere(new THREE.Sphere());
+      target.copy(partSphere.center);
       if (radius > 5 * partSphere.radius) {
-        target.copy(partSphere.center);
         radius = Math.min(radius, Math.max(partSphere.radius * 2, 0.24));
       } else {
-        target.lerp(partSphere.center, 0.2);
         radius *= 1.08;
       }
     }
